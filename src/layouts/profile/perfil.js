@@ -37,7 +37,6 @@ function Overview() {
       <DashboardNavbar />
       <MDBox mb={2} />
       <Header>
-        {/* === Contenido migrado del segundo formulario (solo diseño) === */}
         <MDBox px={2} mt={-10} mb={2}>
           <Grid container spacing={3}>
             {/* Columna izquierda: Card de perfil */}
@@ -51,46 +50,7 @@ function Overview() {
                   />
                 </MDBox>
 
-                {/* <CardActions sx={{ justifyContent: "center", mt: 1 }}>
-                  <Stack direction="row" spacing={1}>
-                    <MDButton variant="contained" color="info" size="small">
-                      Connect
-                    </MDButton>
-
-                    <MDButton variant="outlined" color="info" size="small">
-                      Message
-                    </MDButton>
-                  </Stack>
-                </CardActions> */}
-
                 <CardContent>
-                  <Grid container justifyContent="center" spacing={2} sx={{ mt: 1 }}>
-                    <Grid item>
-                      <MDBox textAlign="center">
-                        <MDTypography variant="h5">22</MDTypography>
-                        <MDTypography variant="button" color="text">
-                          Postulaciones
-                        </MDTypography>
-                      </MDBox>
-                    </Grid>
-                    <Grid item>
-                      <MDBox textAlign="center">
-                        <MDTypography variant="h5">10</MDTypography>
-                        <MDTypography variant="button" color="text">
-                          Fotos
-                        </MDTypography>
-                      </MDBox>
-                    </Grid>
-                    <Grid item>
-                      <MDBox textAlign="center">
-                        <MDTypography variant="h5">89</MDTypography>
-                        <MDTypography variant="button" color="text">
-                          Comentarios
-                        </MDTypography>
-                      </MDBox>
-                    </Grid>
-                  </Grid>
-
                   <MDBox textAlign="center" mt={3}>
                     <MDTypography variant="h5">
                       Cristian Juarez{""}
@@ -130,22 +90,7 @@ function Overview() {
             {/* Columna derecha: Card "My account" con formulario estático */}
             <Grid item xs={12} md={8}>
               <Card elevation={6}>
-                <CardHeader
-                  title={<MDTypography variant="h5">Mi Perfil</MDTypography>}
-                  action={
-                    // <Button variant="contained" size="small" onClick={(e) => e.preventDefault()}>
-                    //   Settings
-                    // </Button>
-                    <MDButton
-                      variant="contained"
-                      color="info"
-                      size="small"
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      Mensaje
-                    </MDButton>
-                  }
-                />
+                <CardHeader title={<MDTypography variant="h5">Mi Perfil</MDTypography>} />
 
                 <CardContent>
                   <MDTypography variant="button" color="text" sx={{ opacity: 0.7 }}>

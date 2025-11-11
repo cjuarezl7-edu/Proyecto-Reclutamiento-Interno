@@ -19,7 +19,7 @@ import MDSnackbar from "components/MDSnackbar";
 import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/AddCircle";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { Select, MenuItem, InputLabel, FormControl } from "@mui/material";
+import { Select, MenuItem, InputLabel, FormControl, Dialog, DialogContent } from "@mui/material";
 
 // ====== ENDPOINTS ======
 const API_BASE = "http://cjuarez99-001-site1.anytempurl.com/api/Vacante";
@@ -53,7 +53,6 @@ const mapVacanteFromApi = (raw) => {
     titulo: v.vac_titulo ?? "",
     descripcion: v.vac_descripcion ?? "",
 
-    // nuevos
     requisitos: v.vac_requisitos ?? "",
     ofrecimiento: v.vac_ofrecimiento ?? "",
     requerimientos: v.vac_requerimientos ?? "",
@@ -76,11 +75,11 @@ const buildVacanteModel = (form, { isUpdate = false } = {}) => ({
 
   // nuevos
   VAC_REQUISITOS: form.requisitos || null,
-  VAC_OFRECIMIENTO: form.ofrecimiento || null, // nombre exacto en DB
+  VAC_OFRECIMIENTO: form.ofrecimiento || null,
   VAC_REQUERIMIENTOS: form.requerimientos || null,
   VAC_URL_IMAGEN: form.urlImagen || null,
 
-  VAC_FECHA_CREACION: new Date().toISOString(), // el server usa SYSDATETIME() al insertar
+  VAC_FECHA_CREACION: new Date().toISOString(),
   VAC_FECHA_CIERRE: form.fechaCierre ? new Date(form.fechaCierre).toISOString() : null,
   CEV_ESTADO_VACANTE: Number(form.estadoId) || 0,
 
@@ -126,6 +125,16 @@ function Vacantes() {
   const [openDelete, setOpenDelete] = useState(false);
   const [vacanteAEliminar, setVacanteAEliminar] = useState(null);
 
+  // Imagen (archivo + preview)
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+
+  // Viewer Dialog para imagen
+  const [imgViewerOpen, setImgViewerOpen] = useState(false);
+
+  // Para preview unificada: primero DataURL (si hay), luego URL BD
+  const srcPreview = imagePreview || form.urlImagen || "";
+
   // ====== HANDLERS ======
   const handleOpenDelete = (vacante) => {
     setVacanteAEliminar(vacante);
@@ -139,6 +148,52 @@ function Vacantes() {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setForm((s) => ({ ...s, [name]: value }));
+  };
+
+  // seleccionar archivo + validaciones + preview
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const valid = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (!valid.includes(file.type)) {
+      openError("Formato no permitido. Usa JPG, PNG, GIF o WEBP.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      openError("La imagen supera los 10 MB.");
+      return;
+    }
+
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setImagePreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearImage = () => {
+    setImageFile(null);
+    setImagePreview("");
+    setForm((s) => ({ ...s, urlImagen: "" }));
+  };
+
+  // subir archivo si hay y devolver URL
+  const uploadImageIfNeeded = async () => {
+    if (!imageFile) return null;
+    try {
+      const fd = new FormData();
+      fd.append("file", imageFile);
+      const { data } = await axios.post(
+        "http://cjuarez99-001-site1.anytempurl.com/api/Vacante/upload-image",
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return data?.url || data?.URL || data?.Url || null;
+    } catch (err) {
+      console.error("Error subiendo imagen:", err);
+      openError("No se pudo subir la imagen.");
+      throw err;
+    }
   };
 
   const resetForm = () => {
@@ -157,6 +212,9 @@ function Vacantes() {
       usuarioModificacion: "1",
     });
     setModoEdicion(false);
+    setImageFile(null);
+    setImagePreview("");
+    setImgViewerOpen(false);
   };
 
   // ====== LOADERS ======
@@ -220,7 +278,6 @@ function Vacantes() {
   const isValidUrl = (s) => {
     if (!s) return true;
     try {
-      // eslint-disable-next-line no-new
       new URL(s);
       return true;
     } catch {
@@ -230,8 +287,16 @@ function Vacantes() {
 
   const MetodoInsertar = async () => {
     try {
-      if (!isValidUrl(form.urlImagen)) return openError("La URL de imagen no es válida.");
-      const payload = buildVacanteModel(form, { isUpdate: false });
+      let finalUrl = form.urlImagen || "";
+      if (imageFile) {
+        const uploadedUrl = await uploadImageIfNeeded();
+        if (uploadedUrl) finalUrl = uploadedUrl;
+      }
+      const payload = {
+        ...buildVacanteModel(form, { isUpdate: false }),
+        VAC_URL_IMAGEN: finalUrl || null,
+      };
+
       const { data } = await axios.post(API_BASE, payload);
       if (data?.id) {
         await loadAll();
@@ -249,9 +314,17 @@ function Vacantes() {
 
   const MetodoActualizar = async () => {
     try {
-      if (!isValidUrl(form.urlImagen)) return openError("La URL de imagen no es válida.");
       const id = form.id;
-      const payload = buildVacanteModel(form, { isUpdate: true });
+      let finalUrl = form.urlImagen || "";
+      if (imageFile) {
+        const uploadedUrl = await uploadImageIfNeeded();
+        if (uploadedUrl) finalUrl = uploadedUrl;
+      }
+      const payload = {
+        ...buildVacanteModel(form, { isUpdate: true }),
+        VAC_URL_IMAGEN: finalUrl || null,
+      };
+
       await axios.put(`${API_BASE}/${id}`, payload);
       await loadAll();
       handleClose();
@@ -303,6 +376,8 @@ function Vacantes() {
         usuarioModificacion: "1",
       });
 
+      setImageFile(null);
+      setImagePreview(det.urlImagen || "");
       setModoEdicion(true);
       setOpen(true);
     } catch (err) {
@@ -314,6 +389,8 @@ function Vacantes() {
   const handleGuardar = async () => {
     if (!form.areaId) return openError("El área es obligatoria.");
     if (!form.estadoId) return openError("El estado es obligatorio.");
+    if (!isValidUrl(form.urlImagen)) return openError("La URL de imagen no es válida.");
+
     if (modoEdicion) await MetodoActualizar();
     else await MetodoInsertar();
   };
@@ -322,7 +399,11 @@ function Vacantes() {
     resetForm();
     setOpen(true);
   };
-  const handleClose = () => setOpen(false);
+
+  const handleClose = () => {
+    setImgViewerOpen(false); // asegurarse que el visor quede cerrado
+    setOpen(false);
+  };
 
   // ====== TABLA (vista corta) ======
   const columns = useMemo(
@@ -330,8 +411,6 @@ function Vacantes() {
       { Header: "ID", accessor: "id" },
       { Header: "Área", accessor: "areaNombre" },
       { Header: "Título", accessor: "tituloShort" },
-      // { Header: "Requisitos", accessor: "requisitosShort" },
-      // { Header: "Ofrecimiento", accessor: "ofrecimientoShort" },
       { Header: "Estado", accessor: "estadoNombre" },
       { Header: "F. Creación", accessor: "fechaCreacion" },
       { Header: "F. Cierre", accessor: "fechaCierre" },
@@ -344,8 +423,6 @@ function Vacantes() {
     id: v.id,
     areaNombre: v.areaNombre ?? "-",
     tituloShort: short(v.titulo, 30),
-    // requisitosShort: short(v.requisitos, 35),
-    // ofrecimientoShort: short(v.ofrecimiento, 35),
     estadoNombre: v.estadoNombre ?? "-",
     fechaCreacion: v.fechaCreacion ? String(v.fechaCreacion).slice(0, 10) : "-",
     fechaCierre: v.fechaCierre ? String(v.fechaCierre).slice(0, 10) : "-",
@@ -373,23 +450,22 @@ function Vacantes() {
     ),
   }));
 
-  // ====== ESTILO MODAL ======
+  // ====== ESTILOS DE MODALES ======
   const modalSx = {
     position: "absolute",
     top: "50%",
     left: "50%",
     transform: "translate(-50%, -50%)",
-    width: { xs: "95%", sm: "85%", md: 720 }, // responsive
-    maxHeight: { xs: "90vh", md: "85vh" }, // alto máx y scroll interno
+    width: { xs: "95%", sm: "85%", md: 720 },
+    maxHeight: { xs: "90vh", md: "85vh" },
     bgcolor: "background.paper",
     borderRadius: 3,
     boxShadow: 24,
     display: "flex",
     flexDirection: "column",
-    overflow: "hidden", // evita dobles scrollbars
+    overflow: "hidden",
   };
 
-  // Modal de confirmación (ligeramente más compacto)
   const confirmModalSx = {
     position: "absolute",
     top: "50%",
@@ -465,7 +541,7 @@ function Vacantes() {
       </MDBox>
       <Footer />
 
-      {/* MODAL ALTA/EDICIÓN */}
+      {/* ====== MODAL ALTA / EDICIÓN ====== */}
       <Modal open={open} onClose={handleClose} keepMounted>
         <Box sx={modalSx}>
           {/* Header sticky */}
@@ -486,7 +562,6 @@ function Vacantes() {
             <MDTypography variant="h6">
               {modoEdicion ? "Actualizar Vacante" : "Agregar Vacante"}
             </MDTypography>
-
             <IconButton
               aria-label="Cerrar"
               onClick={handleClose}
@@ -497,9 +572,8 @@ function Vacantes() {
             </IconButton>
           </MDBox>
 
-          {/* Contenido con scroll interno y scrollbar estilizada */}
+          {/* Contenido con scroll interno */}
           <MDBox
-            component="div"
             px={{ xs: 2, sm: 3 }}
             py={2}
             sx={{
@@ -507,15 +581,11 @@ function Vacantes() {
               flex: 1,
               "&::-webkit-scrollbar": { width: 8 },
               "&::-webkit-scrollbar-track": { background: "transparent" },
-              "&::-webkit-scrollbar-thumb": {
-                background: "rgba(0,0,0,0.2)",
-                borderRadius: 8,
-              },
+              "&::-webkit-scrollbar-thumb": { background: "rgba(0,0,0,0.2)", borderRadius: 8 },
               scrollbarColor: "rgba(0,0,0,0.2) transparent",
               scrollbarWidth: "thin",
             }}
           >
-            {/* --- Tus campos (sin cambios de lógica) --- */}
             <TextField
               fullWidth
               label="Título"
@@ -589,7 +659,6 @@ function Vacantes() {
               InputLabelProps={{ shrink: true }}
             />
 
-            {/* Requisitos */}
             <TextField
               fullWidth
               label="Requisitos"
@@ -601,7 +670,6 @@ function Vacantes() {
               minRows={3}
             />
 
-            {/* Ofrecimiento */}
             <TextField
               fullWidth
               label="Ofrecimiento"
@@ -613,7 +681,6 @@ function Vacantes() {
               minRows={3}
             />
 
-            {/* Requerimientos */}
             <TextField
               fullWidth
               label="Requerimientos"
@@ -625,19 +692,91 @@ function Vacantes() {
               minRows={3}
             />
 
-            {/* URL Imagen */}
-            <TextField
-              fullWidth
-              label="URL Imagen"
-              name="urlImagen"
-              value={form.urlImagen}
-              onChange={handleInputChange}
-              margin="normal"
-              placeholder="https://…"
-            />
+            {/* Carga de imagen + URL + Vista previa (abre visor) */}
+            <Grid container spacing={2} mt={1}>
+              <Grid item xs={12} sm={7}>
+                <MDTypography variant="subtitle2" gutterBottom>
+                  Imagen de la vacante
+                </MDTypography>
+
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1.5,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  <MDButton variant="outlined" color="info" component="label">
+                    Seleccionar imagen
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={handleImageChange}
+                      aria-label="Seleccionar imagen"
+                    />
+                  </MDButton>
+
+                  <TextField
+                    fullWidth
+                    label="URL Imagen (opcional)"
+                    name="urlImagen"
+                    value={form.urlImagen}
+                    onChange={handleInputChange}
+                    placeholder="https://…"
+                  />
+
+                  {(imagePreview || form.urlImagen) && (
+                    <MDButton variant="outlined" color="error" onClick={handleClearImage}>
+                      Limpiar imagen
+                    </MDButton>
+                  )}
+                </Box>
+              </Grid>
+
+              <Grid item xs={12} sm={5}>
+                <MDTypography variant="subtitle2" gutterBottom>
+                  Vista previa (click para ampliar)
+                </MDTypography>
+
+                <Box
+                  sx={{
+                    width: "100%",
+                    aspectRatio: "16/10",
+                    borderRadius: 2,
+                    border: (t) => `1px dashed ${t.palette.divider}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    overflow: "hidden",
+                    bgcolor: (t) => t.palette.grey[50],
+                  }}
+                >
+                  {srcPreview ? (
+                    <img
+                      src={srcPreview}
+                      alt="Miniatura de la vacante"
+                      onClick={() => setImgViewerOpen(true)}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
+                        cursor: "zoom-in",
+                      }}
+                    />
+                  ) : (
+                    <MDTypography variant="button" color="text">
+                      Sin imagen
+                    </MDTypography>
+                  )}
+                </Box>
+              </Grid>
+            </Grid>
           </MDBox>
 
-          {/* Acciones sticky */}
+          {/* Footer sticky */}
           <MDBox
             px={{ xs: 2, sm: 3 }}
             py={2}
@@ -657,12 +796,7 @@ function Vacantes() {
                 display="flex"
                 justifyContent={{ xs: "stretch", sm: "flex-end" }}
               >
-                <MDButton
-                  variant="gradient"
-                  color="success"
-                  onClick={handleGuardar}
-                  fullWidth={true}
-                >
+                <MDButton variant="gradient" color="success" onClick={handleGuardar} fullWidth>
                   {modoEdicion ? "Actualizar" : "Guardar"}
                 </MDButton>
               </Grid>
@@ -673,7 +807,7 @@ function Vacantes() {
                 display="flex"
                 justifyContent={{ xs: "stretch", sm: "flex-start" }}
               >
-                <MDButton variant="gradient" color="error" onClick={handleClose} fullWidth={true}>
+                <MDButton variant="gradient" color="error" onClick={handleClose} fullWidth>
                   Cancelar
                 </MDButton>
               </Grid>
@@ -682,7 +816,7 @@ function Vacantes() {
         </Box>
       </Modal>
 
-      {/* MODAL ELIMINAR */}
+      {/* ====== MODAL CONFIRMACIÓN ELIMINAR ====== */}
       <Modal open={openDelete} onClose={handleCloseDelete} keepMounted>
         <Box
           sx={confirmModalSx}
@@ -690,7 +824,6 @@ function Vacantes() {
           aria-modal="true"
           aria-labelledby="confirm-delete-title"
         >
-          {/* Header sticky */}
           <MDBox
             px={3}
             py={2}
@@ -718,7 +851,6 @@ function Vacantes() {
             </IconButton>
           </MDBox>
 
-          {/* Contenido */}
           <MDBox
             px={{ xs: 2, sm: 3 }}
             py={2}
@@ -749,25 +881,15 @@ function Vacantes() {
               <MDTypography variant="subtitle2" gutterBottom>
                 ID: {vacanteAEliminar?.id ?? "-"}
               </MDTypography>
-
               <MDTypography variant="subtitle2" gutterBottom>
                 Título: {vacanteAEliminar?.titulo ?? "(sin título)"}
               </MDTypography>
-              {/* <MDTypography variant="body2" mb={1}>
-                {vacanteAEliminar?.titulo ?? "(sin título)"}
-              </MDTypography> */}
-
               <MDTypography variant="subtitle2" gutterBottom>
                 Área: {vacanteAEliminar?.areaNombre ?? "-"}
               </MDTypography>
-              {/* <MDTypography variant="body2" mb={1}>
-                {vacanteAEliminar?.areaNombre ?? "-"}
-              </MDTypography> */}
-
               <MDTypography variant="subtitle2" gutterBottom>
                 Estado: {vacanteAEliminar?.estadoNombre ?? "-"}
               </MDTypography>
-              {/* <MDTypography variant="body2">{vacanteAEliminar?.estadoNombre ?? "-"}</MDTypography> */}
             </MDBox>
 
             <MDTypography variant="body2" color="text.secondary">
@@ -775,7 +897,6 @@ function Vacantes() {
             </MDTypography>
           </MDBox>
 
-          {/* Acciones sticky */}
           <MDBox
             px={{ xs: 2, sm: 3 }}
             py={2}
@@ -820,6 +941,64 @@ function Vacantes() {
           </MDBox>
         </Box>
       </Modal>
+
+      {/* ====== VISOR DE IMAGEN (Dialog MUI) ====== */}
+      <Dialog
+        open={imgViewerOpen}
+        onClose={() => setImgViewerOpen(false)}
+        fullScreen
+        keepMounted={false}
+        BackdropProps={{ sx: { backgroundColor: "rgba(0,0,0,0.92)" } }}
+        PaperProps={{ sx: { bgcolor: "transparent", boxShadow: "none" } }}
+      >
+        {/* Botón cerrar */}
+        <IconButton
+          aria-label="Cerrar imagen"
+          title="Cerrar"
+          onClick={() => setImgViewerOpen(false)}
+          sx={{
+            position: "fixed",
+            top: { xs: 8, sm: 16 },
+            right: { xs: 8, sm: 16 },
+            zIndex: (t) => t.zIndex.modal + 1,
+            bgcolor: "rgba(0,0,0,0.55)",
+            color: "white",
+            backdropFilter: "blur(2px)",
+            "&:hover": { bgcolor: "rgba(0,0,0,0.7)" },
+          }}
+        >
+          <CloseIcon />
+        </IconButton>
+
+        <DialogContent
+          sx={{
+            p: 0,
+            m: 0,
+            width: "100vw",
+            height: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            bgcolor: "transparent",
+          }}
+        >
+          {srcPreview && (
+            <img
+              src={srcPreview}
+              alt="Vista ampliada"
+              onClick={() => setImgViewerOpen(false)} // click en imagen también cierra
+              style={{
+                maxWidth: "100vw",
+                maxHeight: "100vh",
+                objectFit: "contain",
+                display: "block",
+                cursor: "zoom-out",
+                userSelect: "none",
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <MDSnackbar
         color="success"

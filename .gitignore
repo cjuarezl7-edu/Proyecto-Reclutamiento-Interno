@@ -1,27 +1,36 @@
-# See https://help.github.com/ignore-files/ for more about ignoring files.
+# Dependencias
+node_modules/
 
-# dependencies
-/node_modules
-.DS_Store
+# Builds
+dist/
+build/
+.next/
+.out/
+.vercel/
 
-# testing
-/coverage
+# Tests
+coverage/
 
-# production
-/build
-
-# misc
-.DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
+# Logs y diagnósticos
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+*.log
 
-package-lock.json
-yarn.lock
+# Variables de entorno
+.env
+.env.*
+!.env.example
 
-commit.sh
+# Herramientas/editores
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Cache de bundlers
+.cache/
+.eslintcache/
+stylelintcache/
+.tmp/
